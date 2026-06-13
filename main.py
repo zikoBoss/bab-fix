@@ -1,12 +1,7 @@
 #!/usr/bin/env python3
 """
-API + Telegram Bot متكامل يعتمد على دوال البوت الثالث (KESHVEXFF) لتجنب الحظر.
-الاستخدام:
-  GET /3?uid=12345678&api_key=...
-  GET /5?uid=12345678&api_key=...
-  GET /6?uid=12345678&api_key=...
-  GET /inv?team_code=ABC123&uid=12345678&api_key=...
-  GET /dance?emote_id=909000001&team_code=ABC123&uids=111,222&api_key=...
+API + Telegram Bot باستخدام xC4.py و KESHVEXFF-DATA.py
+مع تقنيات مقاومة الحظر من البوت الثالث.
 """
 
 import asyncio
@@ -19,7 +14,6 @@ import time
 import random
 import re
 from datetime import datetime
-from typing import Optional
 
 import aiohttp
 import urllib3
@@ -31,13 +25,14 @@ from aiogram.types import Message
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
-# استيراد الدوال الأساسية من البوت الثالث (KESHVEXFF-DATA)
-# تأكد من وجود هذا الملف في نفس المجلد
-from KESHVEXFF import (
-    OpEnSq, cHSq, SEnd_InV, ExiT, GenJoinSquadsPacket, Emote_k,
-    Ua, EnC_PacKeT, DecodE_HeX, GeneRaTePk, CrEaTe_ProTo, FS,
-    GeNeRaTeAccEss, EncRypTMajoRLoGin, MajorLogin, DecRypTMajoRLoGin,
-    GetLoginData, DecRypTLoGinDaTa, xAuThSTarTuP, DeCode_PackEt
+# استيراد الدوال الأساسية من الملفات الموجودة
+from xC4 import (
+    OpEnSq, cHSq, SEnd_InV, ExiT, GeneRaTePk, EnC_PacKeT, DecodE_HeX, Ua, CrEaTe_ProTo
+)
+from KESHVEXFF_DATA import (  # تأكد من أن اسم الملف هو KESHVEXFF-DATA.py أو قم بتغييره هنا
+    Emote_k, FS, GeNeRaTeAccEss, EncRypTMajoRLoGin, MajorLogin,
+    DecRypTMajoRLoGin, GetLoginData, DecRypTLoGinDaTa, xAuThSTarTuP,
+    GenJoinSquadsPacket, DeCode_PackEt
 )
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -51,10 +46,9 @@ DEFAULT_CONFIG = {
     "backup_accounts": {}
 }
 
-BOT_TOKEN = "8299557522:AAHNa8PxOiN7WRvBOr_zhnx2MeNBPWtEqXE"  # ضع توكن البوت الخاص بك
-ADMIN_ID = 6848455321  # معرف المسؤول في تلغرام
+BOT_TOKEN = "8299557522:AAHNa8PxOiN7WRvBOr_zhnx2MeNBPWtEqXE"
+ADMIN_ID = 6848455321
 
-# تحميل الإعدادات
 def load_config():
     if os.path.exists(CONFIG_FILE):
         try:
@@ -74,7 +68,7 @@ AUTO_RESTART_HOURS = config["auto_restart_hours"]
 API_ENABLED = config["api_enabled"]
 BACKUP_ACCOUNTS = config["backup_accounts"]
 
-# متغيرات الاتصال (ستُملأ بعد تسجيل الدخول)
+# متغيرات الاتصال
 online_writer = None
 whisper_writer = None
 key = None
@@ -87,7 +81,7 @@ FF_PASSWORD = None
 app = FastAPI(title="FPI Squad & Dance API (Anti-Ban)")
 logging.basicConfig(level=logging.INFO)
 
-# ================== دوال تحميل الاعتماديات من الملف ==================
+# ================== دوال مساعدة ==================
 def load_credentials_from_file(filename="keshvexff.txt"):
     try:
         with open(filename, 'r', encoding='utf-8') as f:
@@ -119,15 +113,11 @@ def load_cached_token():
         try:
             with open("token.json", "r") as f:
                 data = json.load(f)
-            if time.time() - data.get("saved_at", 0) < 3 * 3600:  # صالح لمدة 3 ساعات
+            if time.time() - data.get("saved_at", 0) < 3 * 3600:
                 return data["token"], data["region"], data["bot_uid"]
         except Exception as e:
             logging.warning(f"خطأ في قراءة التوكن المخزن: {e}")
     return None, None, None
-
-# ================== دوال الاتصال الأساسية (من البوت الثالث) ==================
-# ملاحظة: الدوال GeNeRaTeAccEss, EncRypTMajoRLoGin, MajorLogin, ... تم استيرادها من KESHVEXFF
-# لذلك لا داعي لإعادة تعريفها هنا.
 
 async def SEndPacKeT(typE, packet):
     global online_writer, whisper_writer
@@ -138,11 +128,10 @@ async def SEndPacKeT(typE, packet):
         whisper_writer.write(packet)
         await whisper_writer.drain()
 
-# ================== تسجيل الدخول للعبة (مقاوم للحظر) ==================
+# ================== تسجيل الدخول (مقاوم للحظر) ==================
 async def login_to_freefire():
     global key, iv, region, online_writer, whisper_writer, bot_uid, FF_UID, FF_PASSWORD
     try:
-        # تحميل الاعتماديات من الملف
         uid, pwd = load_credentials_from_file()
         if not uid or not pwd:
             logging.error("فشل تحميل الاعتماديات")
@@ -153,13 +142,11 @@ async def login_to_freefire():
 
         open_id, access_token = await GeNeRaTeAccEss(FF_UID, FF_PASSWORD)
         if not open_id:
-            logging.error("فشل الحصول على open_id / access_token")
             return False
 
         payload = await EncRypTMajoRLoGin(open_id, access_token)
         response = await MajorLogin(payload)
         if not response:
-            logging.error("فشل MajorLogin")
             return False
 
         login_res = await DecRypTMajoRLoGin(response)
@@ -171,12 +158,10 @@ async def login_to_freefire():
         iv = login_res.iv
         timestamp = login_res.timestamp
 
-        # حفظ التوكن في ملف للاستخدام لاحقاً
         save_token_to_file(token, region, bot_uid)
 
         login_data = await GetLoginData(url, payload, token)
         if not login_data:
-            logging.error("فشل GetLoginData")
             return False
 
         login_dec = await DecRypTLoGinDaTa(login_data)
@@ -196,9 +181,8 @@ async def login_to_freefire():
                         data = await reader.read(4096)
                         if not data:
                             break
-                        # يمكن معالجة الحزم الواردة هنا إذا لزم الأمر
                 except Exception as e:
-                    logging.error(f"Online connection error: {e}")
+                    logging.error(f"Online error: {e}")
                     await asyncio.sleep(5)
 
         async def run_chat():
@@ -214,12 +198,12 @@ async def login_to_freefire():
                         if not data:
                             break
                 except Exception as e:
-                    logging.error(f"Chat connection error: {e}")
+                    logging.error(f"Chat error: {e}")
                     await asyncio.sleep(5)
 
         asyncio.create_task(run_online())
         asyncio.create_task(run_chat())
-        await asyncio.sleep(2)  # انتظار تأكيد الاتصال
+        await asyncio.sleep(2)
         logging.info("تم تسجيل الدخول وربط الاتصالات بنجاح")
         return True
 
@@ -227,7 +211,7 @@ async def login_to_freefire():
         logging.error(f"فشل تسجيل الدخول: {e}")
         return False
 
-# ================== دوال الأوامر الأساسية ==================
+# ================== أوامر API ==================
 async def cmd_3(uid: int):
     try:
         await asyncio.sleep(random.uniform(0.2, 0.8))
@@ -317,24 +301,24 @@ async def cmd_dance(emote_id: int, team_code: str, uids: list):
         logging.error(f"cmd_dance error: {e}")
         return False
 
-# ================== حلقات الخلفية للحماية من الحظر ==================
+# ================== حلقات الخلفية للحماية ==================
 async def keep_alive_loop():
     global key, iv, region, online_writer
     while True:
-        await asyncio.sleep(60)  # كل 60 ثانية
+        await asyncio.sleep(60)
         if online_writer and key and iv and region:
             try:
                 packet = await FS(key, iv, region)
                 if packet:
                     await SEndPacKeT('OnLine', packet)
-                    logging.info("📡 Keep-alive packet sent")
+                    logging.info("📡 Keep-alive sent")
             except Exception as e:
                 logging.warning(f"Keep-alive failed: {e}")
 
 async def token_refresh_loop():
     global FF_UID, FF_PASSWORD, key, iv, region, online_writer, whisper_writer
     while True:
-        await asyncio.sleep(4 * 3600)  # كل 4 ساعات
+        await asyncio.sleep(4 * 3600)
         logging.info("🔄 Refreshing token...")
         try:
             open_id, access_token = await GeNeRaTeAccEss(FF_UID, FF_PASSWORD)
@@ -350,14 +334,14 @@ async def token_refresh_loop():
             region = login_res.region
             token = login_res.token
             save_token_to_file(token, region, login_res.account_uid)
-            logging.info("Token refreshed successfully")
+            logging.info("Token refreshed")
         except Exception as e:
             logging.error(f"Token refresh error: {e}")
 
 async def auto_restart_loop():
     while True:
         await asyncio.sleep(AUTO_RESTART_HOURS * 3600)
-        logging.info(f"Auto-restart after {AUTO_RESTART_HOURS} hours...")
+        logging.info(f"Auto-restart after {AUTO_RESTART_HOURS} hours")
         os._exit(1)
 
 # ================== بوت تلغرام ==================
@@ -406,10 +390,6 @@ async def cmd_status(message: Message):
         f"عدد الحسابات الاحتياطية: {len(BACKUP_ACCOUNTS)}"
     )
 
-@dp.message(Command("settings"))
-async def cmd_settings(message: Message):
-    await cmd_status(message)
-
 @dp.message(Command("set_account"))
 async def cmd_set_account(message: Message):
     global FF_UID, FF_PASSWORD
@@ -419,7 +399,6 @@ async def cmd_set_account(message: Message):
     if len(parts) < 3:
         return await message.answer("❌ استخدم: /set_account [UID] [PASSWORD]")
     uid, pwd = parts[1], parts[2]
-    # حفظ في ملف keshvexff.txt
     with open("keshvexff.txt", "w") as f:
         f.write(f"uid={uid}\npassword={pwd}")
     FF_UID = uid
@@ -498,7 +477,7 @@ async def cmd_backups(message: Message):
 async def cmd_logs(message: Message):
     if not is_admin(message):
         return
-    await message.answer("📜 لعرض السجلات، استخدم أمر `railway logs` في بيئة Railway.")
+    await message.answer("📜 لعرض السجلات، استخدم `railway logs` في بيئة Railway.")
 
 @dp.message(Command("api_key"))
 async def cmd_api_key(message: Message):
@@ -523,7 +502,6 @@ async def startup():
         logging.error("فشل الاتصال باللعبة! سيتم إعادة المحاولة لاحقاً.")
     else:
         logging.info("تم الاتصال بنجاح.")
-        # تشغيل حلقات الخلفية
         asyncio.create_task(keep_alive_loop())
         asyncio.create_task(token_refresh_loop())
         asyncio.create_task(auto_restart_loop())
@@ -557,7 +535,7 @@ async def invite(team_code: str = Query(...), uid: int = Query(...), api_key: st
 async def dance(
     emote_id: int = Query(...),
     team_code: str = Query(...),
-    uids: str = Query(..., description="قائمة UIDs مفصولة بفواصل"),
+    uids: str = Query(...),
     api_key: str = Query("")
 ):
     check_auth(api_key)
@@ -576,7 +554,6 @@ async def health():
         "api_enabled": API_ENABLED
     }
 
-# ================== تشغيل ==================
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
